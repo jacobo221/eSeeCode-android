@@ -15,8 +15,8 @@ android {
         applicationId "com.vilahur.jacobo221.eseecode"
         minSdkVersion 11
         targetSdkVersion 23
-        versionCode 6
-        versionName '1.2.1'
+        versionCode 7
+        versionName '1.2.2'
         signingConfig signingConfigs.config
     }
     buildTypes {
