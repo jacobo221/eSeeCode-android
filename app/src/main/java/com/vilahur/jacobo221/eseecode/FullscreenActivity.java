@@ -99,12 +99,10 @@ public class FullscreenActivity extends AppCompatActivity {
 
             // openFileChooser for Android 3.0+
             public void openFileChooser(ValueCallback<Uri> uploadMsg, String acceptType) {
-                return;
             }
 
             // openFileChooser for Android < 3.0
             public void openFileChooser(ValueCallback<Uri> uploadMsg) {
-                return;
             }
 
             // openFileChooser for other Android versions
@@ -112,7 +110,6 @@ public class FullscreenActivity extends AppCompatActivity {
                https://code.google.com/p/android/issues/detail?id=62220
                however newer versions of KitKat fixed it on some devices */
             public void openFileChooser(ValueCallback<Uri> uploadMsg, String acceptType, String capture) {
-                return;
             }
         });
 
@@ -256,6 +253,13 @@ public class FullscreenActivity extends AppCompatActivity {
                             myOutStream.flush();
                             myOutStream.close();
                             fOut.close();
+                            // Open image
+                            if (mimeType.indexOf("image/") == 0) {
+                                Intent intent = new Intent();
+                                intent.setAction(Intent.ACTION_VIEW);
+                                intent.setDataAndType(Uri.fromFile(myFile), "image/*");
+                                startActivity(intent);
+                            }
                             Toast.makeText(getBaseContext(), String.format(getResources().getString(R.string.downloaded_info), filename), Toast.LENGTH_SHORT).show();
                             writeFileStatus = "success";
                             data = null;
@@ -312,7 +316,7 @@ public class FullscreenActivity extends AppCompatActivity {
             if (filename.length() == 0) {
                 filename = "code.esee";
             }
-            if (filename.indexOf(File.separator) >= 0) {
+            if (filename.contains(File.separator)) {
                 Toast.makeText(getApplicationContext(), "Invalid path!", Toast.LENGTH_LONG).show();
                 return "undefined";
             }
@@ -332,16 +336,15 @@ public class FullscreenActivity extends AppCompatActivity {
             } catch (IOException e) {
                 Toast.makeText(getApplicationContext(), e.getMessage(), Toast.LENGTH_LONG).show();
             }
-            String object = "{ " +
+            return "{ " +
                     "\"filename\": \"" + filename + "\", " +
                     "\"data\": \"" + Uri.encode(data) + "\"" +
                     " }";
-            return object;
         }
 
         @JavascriptInterface
         public void eseecodeSaveData(String inData, String inFilename, String mimetype) {
-            if (inFilename.indexOf(File.separator) >= 0) {
+            if (inFilename.contains(File.separator)) {
                 filename = inFilename;
                 writeFileStatus = "invalid path";
                 Toast.makeText(getApplicationContext(), "Invalid path!", Toast.LENGTH_LONG).show();
