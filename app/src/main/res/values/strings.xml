@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name" translatable="false">eSeeCode</string>
+    <string name="downloaded_info">File \'%s\' saved</string>
+</resources>
