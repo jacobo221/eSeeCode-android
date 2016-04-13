@@ -1,20 +1,16 @@
 package com.vilahur.jacobo221.eseecode;
 
 import android.app.Activity;
-import android.content.ContentResolver;
-import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
-import android.provider.MediaStore;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Base64;
-import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -29,7 +25,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Locale;
@@ -119,7 +114,16 @@ public class FullscreenActivity extends AppCompatActivity {
         myBrowser.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                return false;
+                // Load external links on default browser
+                if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                    return true;
+                } else if (url.startsWith("file://")) {
+                    // Ignore file:// links
+                    return true;
+                } else {
+                    return false;
+                }
             }
 
             @Override
@@ -159,20 +163,24 @@ public class FullscreenActivity extends AppCompatActivity {
                         "};" +
                         "window.$e_openCodeFileHandler = function(event) {" +
                         "   var target = JSON.parse(window.JSInterface.eseecodeOpenFile());" +
-                        "   var listFilesHTML = '<u>'+target[0]+'</u>:<br />';" +
-                        "   for (var i=1; i<target.length; i++) {" +
-                        "       listFilesHTML += '<div>';" +
-                        "       listFilesHTML +=    '<a class=\"tab-button\" style=\"float:left\" onclick=\"$e_openReadFile(\\''+target[i]+'\\')\">'+target[i]+'</a>';" +
-                        "       listFilesHTML += '</div>';" +
+                        "   if (target.length > 0) {" +
+                        "       var listFilesHTML = '<u>'+target[0]+'</u>:<br />';" +
+                        "       for (var i=1; i<target.length; i++) {" +
+                        "           listFilesHTML += '<div>';" +
+                        "           listFilesHTML +=    '<a class=\"tab-button\" style=\"float:left\" onclick=\"$e_openReadFile(\\''+target[i]+'\\')\">'+target[i]+'</a>';" +
+                        "           listFilesHTML += '</div>';" +
+                        "       }" +
                         "   }" +
                         "   $e_msgBox(listFilesHTML, { acceptName: _('Cancel') });" +
                         "};" +
                         "window.$e_openReadFile = function(filename) {" +
                         "   var target = JSON.parse(window.JSInterface.eseecodeReadFile(filename));" +
-                        "   var code = unescape(target.data);" +
-                        "   var filename = target.filename;" +
-                        "   $e_loadFile(code, filename, $e_loadCodeFile);" +
-                        "   window.$e_usingFile = filename;" +
+                        "   if (target && target.data) {" +
+                        "      var code = decodeURIComponent(target.data);" +
+                        "       var filename = target.filename;" +
+                        "       $e_loadFile(code, filename, $e_loadCodeFile);" +
+                        "       window.$e_usingFile = filename;" +
+                        "   }" +
                         "   $e_msgBoxClose();" +
                         "};" +
                         "$_eseecode.i18n.available.ca['File \\'%s\\' already exists. Do you want to overwrite it?'] = 'El archivo \\'%s\\' ya existe. ¿Quieres sobreescribirlo?';" +
@@ -197,23 +205,13 @@ public class FullscreenActivity extends AppCompatActivity {
                             "   API_showFilemenu(false, true);" +
                             "   API_switchLanguage('"+language+"', true);" +
                             "}");
+                // Read file passed as argument
                 if (openFilePath != null) {
-                    try {
-                        FileInputStream fis = new FileInputStream(new File(openFilePath));
-                        BufferedReader reader = new BufferedReader(new InputStreamReader(fis));
-                        StringBuilder sb = new StringBuilder();
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                            sb.append(line+"\n");
-                        }
-                        reader.close();
-                        fis.close();
-                        String data = sb.toString();
-                        String code = Uri.encode(data);
-                        myBrowser.loadUrl("javascript:(function(){var code=unescape('"+code+"');API_uploadCode(code);})()");
-                    } catch (IOException e) {
-                        Toast.makeText(getApplicationContext(), e.getMessage(), Toast.LENGTH_LONG).show();
-                    }
+                    // Android 4.4 doesn't accept escaped URLs in loadUrl so we convert to base64 and then in webview we decode it
+                    String code = eseecodeReadFileFromPath(openFilePath);
+                    byte[] code64 = Base64.encode(code.getBytes(Charset.forName("UTF-8")), Base64.NO_WRAP);
+                    String data = new String(code64, Charset.forName("UTF-8"));
+                    myBrowser.loadUrl("javascript:API_uploadCode(window.atob('"+data+"'));");
                 }
             }
         });
@@ -276,6 +274,25 @@ public class FullscreenActivity extends AppCompatActivity {
         }
     }
 
+    private String eseecodeReadFileFromPath(String filePath) {
+        String data = null;
+        try {
+            FileInputStream fis = new FileInputStream(new File(filePath));
+            BufferedReader reader = new BufferedReader(new InputStreamReader(fis));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line+"\n");
+            }
+            reader.close();
+            fis.close();
+            data = sb.toString();
+        } catch (IOException e) {
+            Toast.makeText(getApplicationContext(), e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+        return data;
+    }
+
     public class JavaScriptInterface {
         private Activity activity;
 
@@ -295,17 +312,33 @@ public class FullscreenActivity extends AppCompatActivity {
             String object = "[ \"" + path + "\", ";
             try {
                 File f = new File(path);
-                File files[] = f.listFiles();
-                Arrays.sort(files);
-                String data = "";
-                for (File file : files) {
-                    if (file.isFile()) {
-                        data += "\"" + file.getName() + "\", ";
+                if (f.exists()) {
+                    File files[] = f.listFiles();
+                    if (files != null && files.length > 0) {
+                        String data = "";
+                        Arrays.sort(files);
+                        for (File file : files) {
+                            if (file.isFile()) {
+                                data += "\"" + file.getName() + "\", ";
+                            }
+                        }
+                        object += data.substring(0, data.length() - 2); // Remove last ", "
+                    } else {
+                        String message = getResources().getString(R.string.no_files);
+                        if (!Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
+                            message += ". "+getResources().getString(R.string.ask_sdcard);
+                        }
+                        Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
                     }
+                } else {
+                    String message = getResources().getString(R.string.no_files);
+                    if (!Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
+                        message += ". "+getResources().getString(R.string.ask_sdcard);
+                    }
+                    Toast.makeText(getApplicationContext(), message, Toast.LENGTH_SHORT).show();
                 }
-                object += data.substring(0, data.length() - 2); // Remove last ", "
             } catch (Exception e) {
-                Toast.makeText(getApplicationContext(), "ERROR", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), e.getMessage(), Toast.LENGTH_SHORT).show();
             }
             object += " ]";
             return object;
@@ -318,24 +351,10 @@ public class FullscreenActivity extends AppCompatActivity {
             }
             if (filename.contains(File.separator)) {
                 Toast.makeText(getApplicationContext(), "Invalid path!", Toast.LENGTH_LONG).show();
-                return "undefined";
+                return "{ }";
             }
             String filePath = getAppPath("") + File.separator + filename;
-            String data = null;
-            try {
-                FileInputStream fis = new FileInputStream(new File(filePath));
-                BufferedReader reader = new BufferedReader(new InputStreamReader(fis));
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    sb.append(line+"\n");
-                }
-                reader.close();
-                fis.close();
-                data = sb.toString();
-            } catch (IOException e) {
-                Toast.makeText(getApplicationContext(), e.getMessage(), Toast.LENGTH_LONG).show();
-            }
+            String data = eseecodeReadFileFromPath(filePath);
             return "{ " +
                     "\"filename\": \"" + filename + "\", " +
                     "\"data\": \"" + Uri.encode(data) + "\"" +
@@ -392,21 +411,13 @@ public class FullscreenActivity extends AppCompatActivity {
     private String getAppPath(String mimetype) {
         if (mimetype.indexOf("image/") == 0) {
             if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    return getExternalFilesDir(Environment.DIRECTORY_PICTURES) + File.separator + filename;
-                } else {
-                    return Environment.getExternalStorageDirectory().getPath() + File.separator + "eSeeCode" + File.separator + "Pictures";
-                }
+                return getExternalFilesDir(Environment.DIRECTORY_PICTURES).getPath();
             } else {
-                return getFilesDir().getPath() + File.separator + "Pictures" + File.separator + filename;
+                return getFilesDir().getPath() + File.separator + "Pictures";
             }
         } else {
             if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT) {
-                    return Environment.getExternalStorageDirectory().getPath() + File.separator + "eSeeCode";
-                } else {
-                    return getExternalFilesDir(null).getPath();
-                }
+                return getExternalFilesDir(null).getPath();
             } else {
                 return getFilesDir().getPath();
             }

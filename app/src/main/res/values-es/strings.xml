@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="downloaded_info">Se ha guardado el archivo \'%s\' </string>
+    <string name="no_files">No existen archivos guardados</string>
+    <string name="ask_sdcard">¿Quizás se ha extraído la tarjeta SD?</string>
 </resources>

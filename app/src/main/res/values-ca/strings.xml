@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="downloaded_info">S\'ha desat l\'arxiu \'%s\'</string>
+    <string name="no_files">Encara no s\'ha desat cap arxiu</string>
+    <string name="ask_sdcard">Potser falta la tarjeta SD?</string>
 </resources>
